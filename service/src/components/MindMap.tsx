@@ -38,11 +38,11 @@ interface MindMapProps {
 }
 
 const statusColors: Record<string, { bg: string; border: string; text: string }> = {
-    backlog: { bg: "bg-gray-700", border: "border-gray-500", text: "text-gray-300" },
-    todo: { bg: "bg-blue-700", border: "border-blue-500", text: "text-blue-300" },
-    doing: { bg: "bg-yellow-700", border: "border-yellow-500", text: "text-yellow-300" },
-    done: { bg: "bg-green-700", border: "border-green-500", text: "text-green-300" },
-    archive: { bg: "bg-purple-700", border: "border-purple-500", text: "text-purple-300" },
+    backlog: { bg: "bg-gray-700", border: "border-gray-600", text: "text-gray-300" },
+    todo: { bg: "bg-blue-900", border: "border-blue-700", text: "text-blue-300" },
+    doing: { bg: "bg-orange-900", border: "border-orange-700", text: "text-orange-300" },
+    done: { bg: "bg-gray-800", border: "border-gray-600", text: "text-gray-500" },
+    archive: { bg: "bg-purple-900", border: "border-purple-700", text: "text-purple-300" },
 };
 
 const statusLabels: Record<string, string> = {
@@ -55,53 +55,81 @@ const statusLabels: Record<string, string> = {
 
 // カテゴリー色のマッピング（colorプロパティ → Tailwindクラス）
 const colorMapping: Record<string, { bg: string; border: string; header: string }> = {
-    blue: { bg: "bg-blue-900/30", border: "border-blue-600", header: "bg-blue-600" },
-    purple: { bg: "bg-purple-900/30", border: "border-purple-600", header: "bg-purple-600" },
-    green: { bg: "bg-green-900/30", border: "border-green-600", header: "bg-green-600" },
-    orange: { bg: "bg-orange-900/30", border: "border-orange-600", header: "bg-orange-600" },
-    cyan: { bg: "bg-cyan-900/30", border: "border-cyan-600", header: "bg-cyan-600" },
-    gray: { bg: "bg-gray-900/30", border: "border-gray-600", header: "bg-gray-600" },
-    red: { bg: "bg-red-900/30", border: "border-red-600", header: "bg-red-600" },
-    yellow: { bg: "bg-yellow-900/30", border: "border-yellow-600", header: "bg-yellow-600" },
-    pink: { bg: "bg-pink-900/30", border: "border-pink-600", header: "bg-pink-600" },
-    indigo: { bg: "bg-indigo-900/30", border: "border-indigo-600", header: "bg-indigo-600" },
+    blue: { bg: "bg-blue-950/20", border: "border-blue-800/40", header: "bg-blue-900/50" },
+    purple: { bg: "bg-purple-950/20", border: "border-purple-800/40", header: "bg-purple-900/50" },
+    green: { bg: "bg-green-950/20", border: "border-green-800/40", header: "bg-green-900/50" },
+    orange: { bg: "bg-orange-950/20", border: "border-orange-800/40", header: "bg-orange-900/50" },
+    cyan: { bg: "bg-cyan-950/20", border: "border-cyan-800/40", header: "bg-cyan-900/50" },
+    gray: { bg: "bg-gray-950/20", border: "border-gray-800/40", header: "bg-gray-900/50" },
+    red: { bg: "bg-red-950/20", border: "border-red-800/40", header: "bg-red-900/50" },
+    yellow: { bg: "bg-yellow-950/20", border: "border-yellow-800/40", header: "bg-yellow-900/50" },
+    pink: { bg: "bg-pink-950/20", border: "border-pink-800/40", header: "bg-pink-900/50" },
+    indigo: { bg: "bg-indigo-950/20", border: "border-indigo-800/40", header: "bg-indigo-900/50" },
 };
 
 export function MindMap({ tasks, relations, categories, onTaskClick, selectedTaskId }: MindMapProps) {
-    const [draggedTask, setDraggedTask] = useState<string | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
     const taskRefs = useRef<Map<string, HTMLDivElement>>(new Map());
     const [taskPositions, setTaskPositions] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map());
+
+    // ズームとパンのstate
+    const [zoom, setZoom] = useState(1);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
+    const [isPanning, setIsPanning] = useState(false);
+    const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+    const [lastPan, setLastPan] = useState({ x: 0, y: 0 });
+
+    // カテゴリーの位置管理
+    const [categoryPositions, setCategoryPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
+    const [draggedCategory, setDraggedCategory] = useState<string | null>(null);
+    const [categoryDragStart, setCategoryDragStart] = useState({ x: 0, y: 0 });
+    const [categoryDragOffset, setCategoryDragOffset] = useState({ x: 0, y: 0 });
+
+    // タスクの相対位置管理（セクション内での位置）
+    const [taskRelativePositions, setTaskRelativePositions] = useState<Map<string, { x: number; y: number }>>(new Map());
+    const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+    const [taskDragStart, setTaskDragStart] = useState({ x: 0, y: 0 });
+    const [taskDragOffset, setTaskDragOffset] = useState({ x: 0, y: 0 });
+    const categoryRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
     // タスクの位置を更新
     useEffect(() => {
         const updatePositions = () => {
-            if (!containerRef.current) return;
-            const containerRect = containerRef.current.getBoundingClientRect();
+            if (!containerRef.current || !contentRef.current) return;
+            // ドラッグ中は位置更新をスキップ
+            if (draggingTaskId || draggedCategory) return;
+
+            const contentRect = contentRef.current.getBoundingClientRect();
             const newPositions = new Map<string, { x: number; y: number; width: number; height: number }>();
 
             taskRefs.current.forEach((element, taskId) => {
                 const rect = element.getBoundingClientRect();
+                // contentRef基準の座標に変換
                 newPositions.set(taskId, {
-                    x: rect.left - containerRect.left + containerRef.current!.scrollLeft,
-                    y: rect.top - containerRect.top + containerRef.current!.scrollTop,
-                    width: rect.width,
-                    height: rect.height,
+                    x: (rect.left - contentRect.left) / zoom,
+                    y: (rect.top - contentRect.top) / zoom,
+                    width: rect.width / zoom,
+                    height: rect.height / zoom,
                 });
             });
 
             setTaskPositions(newPositions);
         };
 
-        // 少し遅延させてDOMが確定してから位置を取得
-        const timer = setTimeout(updatePositions, 100);
+        // requestAnimationFrameで次のフレームで更新
+        const rafId = requestAnimationFrame(() => {
+            const timeoutId = setTimeout(updatePositions, 50);
+            return () => clearTimeout(timeoutId);
+        });
+
         window.addEventListener('resize', updatePositions);
 
         return () => {
-            clearTimeout(timer);
+            cancelAnimationFrame(rafId);
             window.removeEventListener('resize', updatePositions);
         };
-    }, [tasks, categories]);
+    }, [tasks, categories, zoom, categoryPositions, taskRelativePositions, draggingTaskId, draggedCategory]);
 
     // カテゴリーをorderでソート
     const sortedCategories = useMemo(() => {
@@ -133,14 +161,168 @@ export function MindMap({ tasks, relations, categories, onTaskClick, selectedTas
         return sortedCategories.filter(cat => tasksByCategory[cat.id]?.length > 0);
     }, [sortedCategories, tasksByCategory]);
 
-    const handleDragStart = useCallback((e: React.DragEvent, taskId: string) => {
-        setDraggedTask(taskId);
-        e.dataTransfer.effectAllowed = "move";
-    }, []);
+    // カテゴリーの初期位置を設定
+    useEffect(() => {
+        const newPositions = new Map<string, { x: number; y: number }>();
+        activeCategories.forEach((cat, index) => {
+            if (!categoryPositions.has(cat.id)) {
+                const col = index % 3;
+                const row = Math.floor(index / 3);
+                newPositions.set(cat.id, {
+                    x: col * 400,
+                    y: row * 500,
+                });
+            } else {
+                newPositions.set(cat.id, categoryPositions.get(cat.id)!);
+            }
+        });
+        setCategoryPositions(newPositions);
+    }, [activeCategories]);
 
-    const handleDragEnd = useCallback(() => {
-        setDraggedTask(null);
-    }, []);
+    // タスクのドラッグ開始
+    const handleTaskMouseDown = useCallback((e: React.MouseEvent, taskId: string) => {
+        e.stopPropagation();
+        setDraggingTaskId(taskId);
+        const pos = taskRelativePositions.get(taskId) || { x: 0, y: 0 };
+        setTaskDragStart({ x: e.clientX / zoom, y: e.clientY / zoom });
+        setTaskDragOffset({ x: pos.x, y: pos.y });
+    }, [taskRelativePositions, zoom]);
+
+    // タスクのドラッグ中（セクション内に制約）
+    useEffect(() => {
+        if (!draggingTaskId) return;
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const dx = e.clientX / zoom - taskDragStart.x;
+            const dy = e.clientY / zoom - taskDragStart.y;
+
+            // タスクが属するカテゴリーを探す
+            const task = tasks.find(t => t.id === draggingTaskId);
+            if (!task) return;
+
+            const categoryElement = categoryRefs.current.get(task.category);
+            if (!categoryElement) return;
+
+            const categoryRect = categoryElement.getBoundingClientRect();
+            const taskElement = taskRefs.current.get(draggingTaskId);
+            if (!taskElement) return;
+
+            const taskRect = taskElement.getBoundingClientRect();
+
+            // 新しい位置を計算
+            let newX = taskDragOffset.x + dx;
+            let newY = taskDragOffset.y + dy;
+
+            // セクション内に制約（padding 24px = 6 * 4pxを考慮）
+            const padding = 24;
+            const headerHeight = 48; // ヘッダーの高さ
+            const maxX = (categoryRect.width / zoom) - (taskRect.width / zoom) - padding;
+            const maxY = (categoryRect.height / zoom) - (taskRect.height / zoom) - padding - headerHeight;
+
+            newX = Math.max(padding, Math.min(newX, maxX));
+            newY = Math.max(headerHeight + padding, Math.min(newY, maxY + headerHeight));
+
+            setTaskRelativePositions(prev => {
+                const newPos = new Map(prev);
+                newPos.set(draggingTaskId, { x: newX, y: newY });
+                return newPos;
+            });
+        };
+
+        const handleMouseUp = () => {
+            setDraggingTaskId(null);
+            // ドラッグ終了後に位置を更新
+            requestAnimationFrame(() => {
+                if (contentRef.current && containerRef.current) {
+                    const contentRect = contentRef.current.getBoundingClientRect();
+                    const newPositions = new Map<string, { x: number; y: number; width: number; height: number }>();
+
+                    taskRefs.current.forEach((element, taskId) => {
+                        const rect = element.getBoundingClientRect();
+                        newPositions.set(taskId, {
+                            x: (rect.left - contentRect.left) / zoom,
+                            y: (rect.top - contentRect.top) / zoom,
+                            width: rect.width / zoom,
+                            height: rect.height / zoom,
+                        });
+                    });
+
+                    setTaskPositions(newPositions);
+                }
+            });
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [draggingTaskId, taskDragStart, taskDragOffset, zoom, tasks]);
+
+    // カテゴリーのドラッグ開始
+    const handleCategoryMouseDown = useCallback((e: React.MouseEvent, categoryId: string) => {
+        // ヘッダー部分のみドラッグ可能
+        const target = e.target as HTMLElement;
+        if (!target.closest('[data-category-header]')) return;
+
+        e.stopPropagation();
+        setDraggedCategory(categoryId);
+        const pos = categoryPositions.get(categoryId) || { x: 0, y: 0 };
+        setCategoryDragStart({ x: e.clientX / zoom, y: e.clientY / zoom });
+        setCategoryDragOffset({ x: pos.x, y: pos.y });
+    }, [categoryPositions, zoom]);
+
+    // カテゴリーのドラッグ中
+    useEffect(() => {
+        if (!draggedCategory) return;
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const dx = e.clientX / zoom - categoryDragStart.x;
+            const dy = e.clientY / zoom - categoryDragStart.y;
+
+            setCategoryPositions(prev => {
+                const newPos = new Map(prev);
+                newPos.set(draggedCategory, {
+                    x: categoryDragOffset.x + dx,
+                    y: categoryDragOffset.y + dy,
+                });
+                return newPos;
+            });
+        };
+
+        const handleMouseUp = () => {
+            setDraggedCategory(null);
+            // ドラッグ終了後に位置を更新
+            requestAnimationFrame(() => {
+                if (contentRef.current && containerRef.current) {
+                    const contentRect = contentRef.current.getBoundingClientRect();
+                    const newPositions = new Map<string, { x: number; y: number; width: number; height: number }>();
+
+                    taskRefs.current.forEach((element, taskId) => {
+                        const rect = element.getBoundingClientRect();
+                        newPositions.set(taskId, {
+                            x: (rect.left - contentRect.left) / zoom,
+                            y: (rect.top - contentRect.top) / zoom,
+                            width: rect.width / zoom,
+                            height: rect.height / zoom,
+                        });
+                    });
+
+                    setTaskPositions(newPositions);
+                }
+            });
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [draggedCategory, categoryDragStart, categoryDragOffset, zoom]);
 
     // 接続線の描画
     const renderConnections = useMemo(() => {
@@ -153,16 +335,27 @@ export function MindMap({ tasks, relations, categories, onTaskClick, selectedTas
             if (!fromPos || !toPos) return null;
 
             // 中心点を計算
-            const x1 = fromPos.x + fromPos.width / 2;
-            const y1 = fromPos.y + fromPos.height / 2;
-            const x2 = toPos.x + toPos.width / 2;
-            const y2 = toPos.y + toPos.height / 2;
+            const fromCenterX = fromPos.x + fromPos.width / 2;
+            const fromCenterY = fromPos.y + fromPos.height / 2;
+            const toCenterX = toPos.x + toPos.width / 2;
+            const toCenterY = toPos.y + toPos.height / 2;
+
+            // 角度を計算してエッジの点を求める
+            const dx = toCenterX - fromCenterX;
+            const dy = toCenterY - fromCenterY;
+            const angle = Math.atan2(dy, dx);
+
+            // fromタスクのエッジ点
+            const x1 = fromCenterX + (fromPos.width / 2) * Math.cos(angle);
+            const y1 = fromCenterY + (fromPos.height / 2) * Math.sin(angle);
+
+            // toタスクのエッジ点
+            const x2 = toCenterX - (toPos.width / 2) * Math.cos(angle);
+            const y2 = toCenterY - (toPos.height / 2) * Math.sin(angle);
 
             // ベジエ曲線のコントロールポイント
             const midX = (x1 + x2) / 2;
             const midY = (y1 + y2) / 2;
-            const dx = x2 - x1;
-            const dy = y2 - y1;
 
             // カーブの強さを距離に応じて調整
             const curveStrength = Math.min(Math.abs(dx), Math.abs(dy)) * 0.3;
@@ -204,143 +397,243 @@ export function MindMap({ tasks, relations, categories, onTaskClick, selectedTas
         }
     }, []);
 
+    // ズーム処理（Cmd/Ctrl + スクロール）
+    const handleWheel = useCallback((e: WheelEvent) => {
+        if (e.metaKey || e.ctrlKey) {
+            e.preventDefault();
+            const delta = e.deltaY;
+            const zoomFactor = delta > 0 ? 0.9 : 1.1;
+            setZoom(prev => Math.max(0.3, Math.min(3, prev * zoomFactor)));
+        }
+    }, []);
+
+    // パン開始
+    const handleMouseDown = useCallback((e: React.MouseEvent) => {
+        // タスク上でない場合のみパンを開始
+        const target = e.target as HTMLElement;
+        if (target.closest('[data-task-id]')) return;
+
+        setIsPanning(true);
+        setPanStart({ x: e.clientX, y: e.clientY });
+        setLastPan(pan);
+    }, [pan]);
+
+    // パン中
+    const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        if (!isPanning) return;
+
+        const dx = e.clientX - panStart.x;
+        const dy = e.clientY - panStart.y;
+        setPan({
+            x: lastPan.x + dx,
+            y: lastPan.y + dy,
+        });
+    }, [isPanning, panStart, lastPan]);
+
+    // パン終了
+    const handleMouseUp = useCallback(() => {
+        setIsPanning(false);
+    }, []);
+
+    // ホイールイベントの登録
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        container.addEventListener('wheel', handleWheel, { passive: false });
+        return () => {
+            container.removeEventListener('wheel', handleWheel);
+        };
+    }, [handleWheel]);
+
     return (
-        <div ref={containerRef} className="relative w-full h-full bg-slate-900 overflow-auto p-6">
+        <div
+            ref={containerRef}
+            className="relative w-full h-full bg-slate-900 overflow-hidden"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+        >
             {/* SVG for connections */}
-            <svg
-                className="absolute inset-0 w-full h-full pointer-events-none"
-                style={{ minWidth: "100%", minHeight: "100%", zIndex: 1 }}
+            <div
+                ref={contentRef}
+                className="absolute inset-0 p-6"
+                style={{
+                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                    transformOrigin: '0 0',
+                    transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+                }}
             >
-                <defs>
-                    <marker
-                        id="arrowhead-depends"
-                        markerWidth="10"
-                        markerHeight="7"
-                        refX="9"
-                        refY="3.5"
-                        orient="auto"
-                    >
-                        <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa" />
-                    </marker>
-                    <marker
-                        id="arrowhead-related"
-                        markerWidth="10"
-                        markerHeight="7"
-                        refX="9"
-                        refY="3.5"
-                        orient="auto"
-                    >
-                        <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
-                    </marker>
-                </defs>
-                {renderConnections}
-            </svg>
-
-            <div className="relative grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 min-h-full" style={{ zIndex: 2 }}>
-                {activeCategories.map((category) => {
-                    const categoryTasks = tasksByCategory[category.id] || [];
-                    const colors = colorMapping[category.color] || colorMapping.gray;
-                    const label = `${category.icon} ${category.name}`;
-
-                    return (
-                        <div
-                            key={category.id}
-                            className={`rounded-xl border-2 ${colors.border} ${colors.bg} overflow-hidden`}
+                <svg
+                    className="absolute pointer-events-none"
+                    style={{
+                        left: 0,
+                        top: 0,
+                        width: "3000px",
+                        height: "3000px",
+                        zIndex: 1,
+                        overflow: 'visible'
+                    }}
+                >
+                    <defs>
+                        <marker
+                            id="arrowhead-depends"
+                            markerWidth="10"
+                            markerHeight="7"
+                            refX="9"
+                            refY="3.5"
+                            orient="auto"
                         >
-                            {/* カテゴリーヘッダー */}
-                            <div className={`${colors.header} px-4 py-3`}>
-                                <h3 className="text-white font-bold text-lg">
-                                    {label}
-                                    <span className="ml-2 text-white/70 text-sm font-normal">
-                                        ({categoryTasks.length})
-                                    </span>
-                                </h3>
-                            </div>
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#60a5fa" />
+                        </marker>
+                        <marker
+                            id="arrowhead-related"
+                            markerWidth="10"
+                            markerHeight="7"
+                            refX="9"
+                            refY="3.5"
+                            orient="auto"
+                        >
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+                        </marker>
+                    </defs>
+                    {renderConnections}
+                </svg>
 
-                            {/* タスクリスト */}
-                            <div className="p-4 space-y-3">
-                                {categoryTasks.length === 0 ? (
-                                    <p className="text-gray-500 text-sm text-center py-4">
-                                        タスクがありません
-                                    </p>
-                                ) : (
-                                    categoryTasks.map((task) => {
-                                        const taskColors = statusColors[task.status] || statusColors.backlog;
-                                        const isSelected = selectedTaskId === task.id;
-                                        const isDragging = draggedTask === task.id;
+                <div className="relative" style={{ zIndex: 2, minWidth: '3000px', minHeight: '3000px' }}>
+                    {activeCategories.map((category) => {
+                        const categoryTasks = tasksByCategory[category.id] || [];
+                        const colors = colorMapping[category.color] || colorMapping.gray;
+                        const label = `${category.icon} ${category.name}`;
+                        const position = categoryPositions.get(category.id) || { x: 0, y: 0 };
+                        const isDragging = draggedCategory === category.id;
 
-                                        return (
-                                            <div
-                                                key={task.id}
-                                                ref={(el) => setTaskRef(task.id, el)}
-                                                data-task-id={task.id}
-                                                draggable
-                                                onDragStart={(e) => handleDragStart(e, task.id)}
-                                                onDragEnd={handleDragEnd}
-                                                onClick={() => onTaskClick(task.id)}
-                                                className={`
-                                                    cursor-pointer transition-all duration-200 rounded-lg p-4 border-2
+                        return (
+                            <div
+                                key={category.id}
+                                ref={(el) => {
+                                    if (el) categoryRefs.current.set(category.id, el);
+                                    else categoryRefs.current.delete(category.id);
+                                }}
+                                className={`absolute rounded-xl border-2 ${colors.border} ${colors.bg} overflow-hidden w-80 ${isDragging ? 'opacity-70 shadow-2xl' : ''}`}
+                                style={{
+                                    left: `${position.x}px`,
+                                    top: `${position.y}px`,
+                                    cursor: 'default',
+                                }}
+                                onMouseDown={(e) => handleCategoryMouseDown(e, category.id)}
+                            >
+                                {/* カテゴリーヘッダー */}
+                                <div
+                                    data-category-header
+                                    className={`${colors.header} px-4 py-3 cursor-move select-none`}
+                                >
+                                    <h3 className="text-white font-bold text-lg pointer-events-none">
+                                        {label}
+                                        <span className="ml-2 text-white/70 text-sm font-normal">
+                                            ({categoryTasks.length})
+                                        </span>
+                                    </h3>
+                                </div>
+
+                                {/* タスクリスト */}
+                                <div className="p-6 relative" style={{ minHeight: '200px' }}>
+                                    {categoryTasks.length === 0 ? (
+                                        <p className="text-gray-500 text-sm text-center py-4">
+                                            タスクがありません
+                                        </p>
+                                    ) : (
+                                        categoryTasks.map((task, index) => {
+                                            const taskColors = statusColors[task.status] || statusColors.backlog;
+                                            const isSelected = selectedTaskId === task.id;
+                                            const isDraggingTask = draggingTaskId === task.id;
+                                            const relativePos = taskRelativePositions.get(task.id);
+
+                                            return (
+                                                <div
+                                                    key={task.id}
+                                                    ref={(el) => setTaskRef(task.id, el)}
+                                                    data-task-id={task.id}
+                                                    onMouseDown={(e) => handleTaskMouseDown(e, task.id)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onTaskClick(task.id);
+                                                    }}
+                                                    className={`
+                                                    cursor-move transition-all duration-200 rounded-lg p-4 border-2
                                                     ${taskColors.bg} ${taskColors.border}
                                                     ${isSelected ? "ring-4 ring-cyan-400 scale-[1.02]" : "hover:scale-[1.01]"}
-                                                    ${isDragging ? "opacity-50" : ""}
+                                                    ${isDraggingTask ? "opacity-50 z-50" : ""}
                                                 `}
-                                            >
-                                                <div className="text-white font-semibold text-sm truncate mb-2">
-                                                    {task.name}
+                                                    style={relativePos ? {
+                                                        position: 'absolute',
+                                                        left: `${relativePos.x}px`,
+                                                        top: `${relativePos.y}px`,
+                                                        width: 'calc(100% - 48px)',
+                                                    } : {
+                                                        position: 'relative',
+                                                        marginBottom: index < categoryTasks.length - 1 ? '20px' : '0',
+                                                    }}
+                                                >
+                                                    <div className={`font-semibold text-sm truncate mb-2 ${task.status === 'done' ? 'text-gray-500' : 'text-white'}`}>
+                                                        {task.name}
+                                                    </div>
+                                                    <div className={`text-xs ${taskColors.text} mb-2`}>
+                                                        {statusLabels[task.status]}
+                                                    </div>
+                                                    <div className={`text-xs line-clamp-2 ${task.status === 'done' ? 'text-gray-600' : 'text-gray-400'}`}>
+                                                        {task.description || "説明なし"}
+                                                    </div>
                                                 </div>
-                                                <div className={`text-xs ${taskColors.text} mb-2`}>
-                                                    {statusLabels[task.status]}
-                                                </div>
-                                                <div className="text-gray-400 text-xs line-clamp-2">
-                                                    {task.description || "説明なし"}
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
-
-                {/* 空の場合のメッセージ */}
-                {activeCategories.length === 0 && (
-                    <div className="col-span-full flex items-center justify-center h-64">
-                        <p className="text-gray-500 text-lg">タスクがありません</p>
-                    </div>
-                )}
-            </div>
-
-            {/* Legend */}
-            <div className="fixed bottom-4 left-4 bg-slate-800/90 rounded-lg p-4 z-20">
-                <div className="text-white text-sm font-semibold mb-2">凡例</div>
-                <div className="flex flex-wrap gap-2 mb-3">
-                    {Object.entries(statusLabels).map(([status, label]) => {
-                        const colors = statusColors[status];
-                        return (
-                            <div key={status} className="flex items-center gap-1">
-                                <div className={`w-3 h-3 rounded ${colors.bg} ${colors.border} border`} />
-                                <span className="text-gray-300 text-xs">{label}</span>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
                         );
                     })}
-                </div>
-                <div className="border-t border-slate-600 pt-2 mt-2">
-                    <div className="text-white text-xs font-semibold mb-1">関係性</div>
-                    <div className="flex gap-4">
-                        <div className="flex items-center gap-1">
-                            <svg width="24" height="8">
-                                <line x1="0" y1="4" x2="20" y2="4" stroke="#60a5fa" strokeWidth="2" />
-                                <polygon points="20 1, 24 4, 20 7" fill="#60a5fa" />
-                            </svg>
-                            <span className="text-gray-300 text-xs">依存</span>
+
+                    {/* 空の場合のメッセージ */}
+                    {activeCategories.length === 0 && (
+                        <div className="col-span-full flex items-center justify-center h-64">
+                            <p className="text-gray-500 text-lg">タスクがありません</p>
                         </div>
-                        <div className="flex items-center gap-1">
-                            <svg width="24" height="8">
-                                <line x1="0" y1="4" x2="20" y2="4" stroke="#a78bfa" strokeWidth="2" strokeDasharray="4,2" />
-                                <polygon points="20 1, 24 4, 20 7" fill="#a78bfa" />
-                            </svg>
-                            <span className="text-gray-300 text-xs">関連</span>
+                    )}
+                </div>
+
+                {/* Legend */}
+                <div className="fixed bottom-4 left-4 bg-slate-800/90 rounded-lg p-4 z-20">
+                    <div className="text-white text-sm font-semibold mb-2">凡例</div>
+                    <div className="flex flex-wrap gap-2 mb-3">
+                        {Object.entries(statusLabels).map(([status, label]) => {
+                            const colors = statusColors[status];
+                            return (
+                                <div key={status} className="flex items-center gap-1">
+                                    <div className={`w-3 h-3 rounded ${colors.bg} ${colors.border} border`} />
+                                    <span className="text-gray-300 text-xs">{label}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="border-t border-slate-600 pt-2 mt-2">
+                        <div className="text-white text-xs font-semibold mb-1">関係性</div>
+                        <div className="flex gap-4">
+                            <div className="flex items-center gap-1">
+                                <svg width="24" height="8">
+                                    <line x1="0" y1="4" x2="20" y2="4" stroke="#60a5fa" strokeWidth="2" />
+                                    <polygon points="20 1, 24 4, 20 7" fill="#60a5fa" />
+                                </svg>
+                                <span className="text-gray-300 text-xs">依存</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <svg width="24" height="8">
+                                    <line x1="0" y1="4" x2="20" y2="4" stroke="#a78bfa" strokeWidth="2" strokeDasharray="4,2" />
+                                    <polygon points="20 1, 24 4, 20 7" fill="#a78bfa" />
+                                </svg>
+                                <span className="text-gray-300 text-xs">関連</span>
+                            </div>
                         </div>
                     </div>
                 </div>
