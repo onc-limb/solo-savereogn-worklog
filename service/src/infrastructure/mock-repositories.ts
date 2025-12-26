@@ -2,19 +2,23 @@ import { TaskEntity } from "../domain/entities/task.entity";
 import { TaskRelationEntity } from "../domain/entities/task-relation.entity";
 import { WorkNoteEntity } from "../domain/entities/work-note.entity";
 import { DailyReportEntity } from "../domain/entities/daily-report.entity";
+import { CategoryEntity } from "../domain/entities/category.entity";
 import { ITaskRepository } from "../domain/repositories/task.repository";
 import { ITaskRelationRepository } from "../domain/repositories/task-relation.repository";
 import { IWorkNoteRepository } from "../domain/repositories/work-note.repository";
 import { IDailyReportRepository } from "../domain/repositories/daily-report.repository";
+import { ICategoryRepository } from "../domain/repositories/category.repository";
 import {
   initialTasks,
   initialTaskRelations,
   initialWorkNotes,
   initialDailyReports,
+  initialCategories,
   TaskData,
   TaskRelationData,
   WorkNoteData,
   DailyReportData,
+  CategoryData,
 } from "./mock-data";
 
 // インメモリストア
@@ -22,6 +26,7 @@ let tasksStore: TaskData[] = [...initialTasks];
 let taskRelationsStore: TaskRelationData[] = [...initialTaskRelations];
 let workNotesStore: WorkNoteData[] = [...initialWorkNotes];
 let dailyReportsStore: DailyReportData[] = [...initialDailyReports];
+let categoriesStore: CategoryData[] = [...initialCategories];
 
 /**
  * モックタスクリポジトリ
@@ -200,8 +205,40 @@ export class MockDailyReportRepository implements IDailyReportRepository {
   }
 }
 
+/**
+ * モックカテゴリーリポジトリ
+ */
+export class MockCategoryRepository implements ICategoryRepository {
+  async findById(id: string): Promise<CategoryEntity | null> {
+    const data = categoriesStore.find((c) => c.id === id);
+    if (!data) return null;
+    return CategoryEntity.reconstruct(data);
+  }
+
+  async findAll(): Promise<CategoryEntity[]> {
+    return categoriesStore
+      .sort((a, b) => a.order - b.order)
+      .map((data) => CategoryEntity.reconstruct(data));
+  }
+
+  async save(category: CategoryEntity): Promise<void> {
+    const plain = category.toPlainObject();
+    const index = categoriesStore.findIndex((c) => c.id === plain.id);
+    if (index >= 0) {
+      categoriesStore[index] = plain;
+    } else {
+      categoriesStore.push(plain);
+    }
+  }
+
+  async delete(id: string): Promise<void> {
+    categoriesStore = categoriesStore.filter((c) => c.id !== id);
+  }
+}
+
 // リポジトリのシングルトンインスタンス
 export const taskRepository = new MockTaskRepository();
 export const taskRelationRepository = new MockTaskRelationRepository();
 export const workNoteRepository = new MockWorkNoteRepository();
 export const dailyReportRepository = new MockDailyReportRepository();
+export const categoryRepository = new MockCategoryRepository();

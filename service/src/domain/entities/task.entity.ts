@@ -17,13 +17,14 @@ export class TaskEntity {
     private isComplete: boolean,
     private status: TaskStatus,
     private description: FreeText,
-    private summary: FreeText
+    private summary: FreeText,
+    private categoryId: string // カテゴリーID（CategoryEntityへの参照）
   ) {}
 
   /**
    * 新規でタスクEntityを作成するメソッド
    */
-  static create(params: { name: string; description?: string }): TaskEntity {
+  static create(params: { name: string; description?: string; category?: string }): TaskEntity {
     const now = DateOnly.now();
     return new TaskEntity(
       TaskId.create(),
@@ -33,7 +34,8 @@ export class TaskEntity {
       false,
       TaskStatus.backlog(),
       FreeText.create(params.description ?? ""),
-      FreeText.empty()
+      FreeText.empty(),
+      params.category ?? "cat-other" // デフォルトは「その他」カテゴリー
     );
   }
 
@@ -49,6 +51,7 @@ export class TaskEntity {
     status: string;
     description: string;
     summary: string;
+    category: string;
   }): TaskEntity {
     return new TaskEntity(
       TaskId.create(params.id),
@@ -60,7 +63,8 @@ export class TaskEntity {
         params.status as Parameters<typeof TaskStatus.create>[0]
       ),
       FreeText.create(params.description),
-      FreeText.create(params.summary)
+      FreeText.create(params.summary),
+      params.category
     );
   }
 
@@ -100,6 +104,14 @@ export class TaskEntity {
    */
   updateDescription(newDescription: string): void {
     this.description = FreeText.create(newDescription);
+    this.updatedAt = DateOnly.now();
+  }
+
+  /**
+   * タスクのカテゴリーを更新するメソッド
+   */
+  updateCategoryId(newCategoryId: string): void {
+    this.categoryId = newCategoryId;
     this.updatedAt = DateOnly.now();
   }
 
@@ -148,6 +160,10 @@ export class TaskEntity {
     return this.summary.getValue();
   }
 
+  getCategory(): string {
+    return this.categoryId;
+  }
+
   /**
    * エンティティをプレーンオブジェクトに変換
    */
@@ -160,6 +176,7 @@ export class TaskEntity {
     status: string;
     description: string;
     summary: string;
+    category: string;
   } {
     return {
       id: this.getId(),
@@ -170,6 +187,7 @@ export class TaskEntity {
       status: this.getStatus(),
       description: this.getDescription(),
       summary: this.getSummary(),
+      category: this.getCategory(),
     };
   }
 }

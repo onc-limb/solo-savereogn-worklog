@@ -11,28 +11,32 @@ import {
   updateTaskStatus,
   updateTaskName,
   updateTaskDescription,
+  updateTaskCategory,
   createWorkNote,
   updateWorkNote,
   deleteWorkNote,
+  getCategories,
 } from "../server/functions";
 
 export const Route = createFileRoute("/")({
   component: TaskListPage,
   loader: async () => {
-    const [tasks, relations] = await Promise.all([
+    const [tasks, relations, categories] = await Promise.all([
       getTasks(),
       getTaskRelations(),
+      getCategories(),
     ]);
-    return { tasks, relations };
+    return { tasks, relations, categories };
   },
 });
 
 function TaskListPage() {
-  const { tasks: initialTasks, relations: initialRelations } =
+  const { tasks: initialTasks, relations: initialRelations, categories: initialCategories } =
     Route.useLoaderData();
 
   const [tasks, setTasks] = useState(initialTasks);
   const [relations, setRelations] = useState(initialRelations);
+  const [categories, setCategories] = useState(initialCategories);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [workNotes, setWorkNotes] = useState<
     { id: string; taskId: string; date: string; note: string }[]
@@ -45,12 +49,14 @@ function TaskListPage() {
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) || null;
 
   const handleRefresh = useCallback(async () => {
-    const [newTasks, newRelations] = await Promise.all([
+    const [newTasks, newRelations, newCategories] = await Promise.all([
       getTasks(),
       getTaskRelations(),
+      getCategories(),
     ]);
     setTasks(newTasks);
     setRelations(newRelations);
+    setCategories(newCategories);
   }, []);
 
   const handleTaskClick = useCallback(async (taskId: string) => {
@@ -90,6 +96,14 @@ function TaskListPage() {
           data: { id: data.id, status: data.status },
         });
       }
+      await handleRefresh();
+    },
+    [handleRefresh]
+  );
+
+  const handleUpdateCategory = useCallback(
+    async (data: { id: string; category: string }) => {
+      await updateTaskCategory({ data });
       await handleRefresh();
     },
     [handleRefresh]
@@ -198,6 +212,7 @@ function TaskListPage() {
         <MindMap
           tasks={tasks}
           relations={relations}
+          categories={categories}
           onTaskClick={handleTaskClick}
           selectedTaskId={selectedTaskId}
         />
@@ -207,11 +222,13 @@ function TaskListPage() {
       <TaskDetailPanel
         task={selectedTask}
         workNotes={workNotes}
+        categories={categories}
         isOpen={isPanelOpen}
         isFullScreen={isFullScreen}
         onClose={handleClosePanel}
         onToggleFullScreen={handleToggleFullScreen}
         onUpdateTask={handleUpdateTask}
+        onUpdateCategory={handleUpdateCategory}
         onAddWorkNote={handleAddWorkNote}
         onUpdateWorkNote={handleUpdateWorkNote}
         onDeleteWorkNote={handleDeleteWorkNote}

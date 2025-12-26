@@ -8,6 +8,7 @@ interface TaskData {
     updatedAt: string;
     isComplete: boolean;
     status: string;
+    category: string;
     description: string;
     summary: string;
 }
@@ -19,14 +20,24 @@ interface WorkNoteData {
     note: string;
 }
 
+interface CategoryData {
+    id: string;
+    name: string;
+    icon: string;
+    color: string;
+    order: number;
+}
+
 interface TaskDetailPanelProps {
     task: TaskData | null;
     workNotes: WorkNoteData[];
+    categories: CategoryData[];
     isOpen: boolean;
     isFullScreen: boolean;
     onClose: () => void;
     onToggleFullScreen: () => void;
     onUpdateTask: (data: { id: string; name?: string; description?: string; status?: string }) => void;
+    onUpdateCategory: (data: { id: string; category: string }) => void;
     onAddWorkNote: (data: { taskId: string; note: string }) => void;
     onUpdateWorkNote: (data: { id: string; note: string }) => void;
     onDeleteWorkNote: (id: string) => void;
@@ -43,11 +54,13 @@ const statusOptions = [
 export function TaskDetailPanel({
     task,
     workNotes,
+    categories,
     isOpen,
     isFullScreen,
     onClose,
     onToggleFullScreen,
     onUpdateTask,
+    onUpdateCategory,
     onAddWorkNote,
     onUpdateWorkNote,
     onDeleteWorkNote,
@@ -56,6 +69,7 @@ export function TaskDetailPanel({
     const [name, setName] = useState(task?.name || "");
     const [description, setDescription] = useState(task?.description || "");
     const [status, setStatus] = useState(task?.status || "backlog");
+    const [category, setCategory] = useState(task?.category || "");
     const [newNote, setNewNote] = useState("");
     const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
     const [editingNoteContent, setEditingNoteContent] = useState("");
@@ -65,6 +79,7 @@ export function TaskDetailPanel({
             setName(task.name);
             setDescription(task.description);
             setStatus(task.status);
+            setCategory(task.category);
         }
     }, [task]);
 
@@ -86,6 +101,11 @@ export function TaskDetailPanel({
     const handleStatusChange = (newStatus: string) => {
         setStatus(newStatus);
         onUpdateTask({ id: task.id, status: newStatus });
+    };
+
+    const handleCategoryChange = (newCategory: string) => {
+        setCategory(newCategory);
+        onUpdateCategory({ id: task.id, category: newCategory });
     };
 
     const handleAddNote = () => {
@@ -171,6 +191,24 @@ export function TaskDetailPanel({
                             {statusOptions.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
                                     {opt.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Category */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">
+                            カテゴリー
+                        </label>
+                        <select
+                            value={category}
+                            onChange={(e) => handleCategoryChange(e.target.value)}
+                            className="w-full bg-slate-700 text-white px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                        >
+                            {categories.map((cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                    {cat.icon} {cat.name}
                                 </option>
                             ))}
                         </select>

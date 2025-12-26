@@ -7,6 +7,7 @@ import {
   FileText,
   ListTodo,
   X,
+  Folder,
 } from 'lucide-react'
 
 export default function Header() {
@@ -70,6 +71,19 @@ export default function Header() {
           >
             <FileText size={20} />
             <span className="font-medium">日報一覧</span>
+          </Link>
+
+          <Link
+            to={"/categories" as any}
+            onClick={() => setIsOpen(false)}
+            className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-colors mb-2"
+            activeProps={{
+              className:
+                'flex items-center gap-3 p-3 rounded-lg bg-cyan-600 hover:bg-cyan-700 transition-colors mb-2',
+            }}
+          >
+            <Folder size={20} />
+            <span className="font-medium">カテゴリー管理</span>
           </Link>
         </nav>
       </aside>

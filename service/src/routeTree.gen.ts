@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ReportsIndexRouteImport } from './routes/reports/index'
+import { Route as CategoriesIndexRouteImport } from './routes/categories/index'
 import { Route as ReportsReportIdRouteImport } from './routes/reports/$reportId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const ReportsIndexRoute = ReportsIndexRouteImport.update({
   path: '/reports/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CategoriesIndexRoute = CategoriesIndexRouteImport.update({
+  id: '/categories/',
+  path: '/categories/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportsReportIdRoute = ReportsReportIdRouteImport.update({
   id: '/reports/$reportId',
   path: '/reports/$reportId',
@@ -32,30 +38,34 @@ const ReportsReportIdRoute = ReportsReportIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/reports/$reportId': typeof ReportsReportIdRoute
+  '/categories': typeof CategoriesIndexRoute
   '/reports': typeof ReportsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/reports/$reportId': typeof ReportsReportIdRoute
+  '/categories': typeof CategoriesIndexRoute
   '/reports': typeof ReportsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/reports/$reportId': typeof ReportsReportIdRoute
+  '/categories/': typeof CategoriesIndexRoute
   '/reports/': typeof ReportsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/reports/$reportId' | '/reports'
+  fullPaths: '/' | '/reports/$reportId' | '/categories' | '/reports'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/reports/$reportId' | '/reports'
-  id: '__root__' | '/' | '/reports/$reportId' | '/reports/'
+  to: '/' | '/reports/$reportId' | '/categories' | '/reports'
+  id: '__root__' | '/' | '/reports/$reportId' | '/categories/' | '/reports/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ReportsReportIdRoute: typeof ReportsReportIdRoute
+  CategoriesIndexRoute: typeof CategoriesIndexRoute
   ReportsIndexRoute: typeof ReportsIndexRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/categories/': {
+      id: '/categories/'
+      path: '/categories'
+      fullPath: '/categories'
+      preLoaderRoute: typeof CategoriesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reports/$reportId': {
       id: '/reports/$reportId'
       path: '/reports/$reportId'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ReportsReportIdRoute: ReportsReportIdRoute,
+  CategoriesIndexRoute: CategoriesIndexRoute,
   ReportsIndexRoute: ReportsIndexRoute,
 }
 export const routeTree = rootRouteImport

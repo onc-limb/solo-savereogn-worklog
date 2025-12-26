@@ -4,11 +4,13 @@ import {
   taskRelationRepository,
   workNoteRepository,
   dailyReportRepository,
+  categoryRepository,
 } from "../infrastructure/mock-repositories";
 import { TaskEntity } from "../domain/entities/task.entity";
 import { TaskRelationEntity } from "../domain/entities/task-relation.entity";
 import { WorkNoteEntity } from "../domain/entities/work-note.entity";
 import { DailyReportEntity } from "../domain/entities/daily-report.entity";
+import { CategoryEntity } from "../domain/entities/category.entity";
 
 // ====== タスク関連 ======
 
@@ -25,7 +27,7 @@ export const getTask = createServerFn({ method: "GET" })
   });
 
 export const createTask = createServerFn({ method: "POST" })
-  .inputValidator((data: { name: string; description?: string }) => data)
+  .inputValidator((data: { name: string; description?: string; category?: string }) => data)
   .handler(async ({ data }) => {
     const task = TaskEntity.create(data);
     await taskRepository.save(task);
@@ -65,6 +67,17 @@ export const updateTaskDescription = createServerFn({ method: "POST" })
     const task = await taskRepository.findById(data.id);
     if (!task) throw new Error("Task not found");
     task.updateDescription(data.description);
+    await taskRepository.save(task);
+    return task.toPlainObject();
+  });
+
+export const updateTaskCategory = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string; category: string }) => data)
+  .handler(async ({ data }) => {
+    const task = await taskRepository.findById(data.id);
+    if (!task) throw new Error("Task not found");
+    // カテゴリーはIDとして保存（バリデーションは任意）
+    task.updateCategoryId(data.category);
     await taskRepository.save(task);
     return task.toPlainObject();
   });
@@ -215,5 +228,71 @@ export const deleteDailyReport = createServerFn({ method: "POST" })
   .inputValidator((data: string) => data)
   .handler(async ({ data: id }) => {
     await dailyReportRepository.delete(id);
+    return { success: true };
+  });
+
+// ====== カテゴリー ======
+
+export const getCategories = createServerFn({ method: "GET" }).handler(
+  async () => {
+    const categories = await categoryRepository.findAll();
+    return categories.map((c) => c.toPlainObject());
+  }
+);
+
+export const getCategory = createServerFn({ method: "GET" })
+  .inputValidator((data: string) => data)
+  .handler(async ({ data: id }) => {
+    const category = await categoryRepository.findById(id);
+    return category?.toPlainObject() ?? null;
+  });
+
+export const createCategory = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: { name: string; icon?: string; color?: string; order?: number }) =>
+      data
+  )
+  .handler(async ({ data }) => {
+    const category = CategoryEntity.create(data);
+    await categoryRepository.save(category);
+    return category.toPlainObject();
+  });
+
+export const updateCategory = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: { id: string; name?: string; icon?: string; color?: string }) => data
+  )
+  .handler(async ({ data }) => {
+    const category = await categoryRepository.findById(data.id);
+    if (!category) throw new Error("Category not found");
+
+    if (data.name !== undefined) {
+      category.updateName(data.name);
+    }
+    if (data.icon !== undefined) {
+      category.updateIcon(data.icon);
+    }
+    if (data.color !== undefined) {
+      category.updateColor(data.color);
+    }
+
+    await categoryRepository.save(category);
+    return category.toPlainObject();
+  });
+
+export const updateCategoryOrder = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string; order: number }) => data)
+  .handler(async ({ data }) => {
+    const category = await categoryRepository.findById(data.id);
+    if (!category) throw new Error("Category not found");
+    category.updateOrder(data.order);
+    await categoryRepository.save(category);
+    return category.toPlainObject();
+  });
+
+export const deleteCategory = createServerFn({ method: "POST" })
+  .inputValidator((data: string) => data)
+  .handler(async ({ data: id }) => {
+    await categoryRepository.delete(id);
     return { success: true };
   });

@@ -16,3 +16,8 @@ export {
   TaskRelationTypeValue,
   TaskRelationTypeValues,
 } from "./task-relation-type.vo";
+export {
+  TaskCategory,
+  TaskCategoryValue,
+  TaskCategoryValues,
+} from "./task-category.vo";
