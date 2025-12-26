@@ -22,3 +22,10 @@ export {
   TaskRelationTypeValue,
   TaskRelationTypeValues,
 } from "./value-objects";
+
+// Repositories
+export type {
+  ITaskRepository,
+  ITaskRelationRepository,
+  IWorkNoteRepository,
+} from "./repositories";
