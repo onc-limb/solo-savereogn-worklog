@@ -85,12 +85,6 @@ export function MindMap({ tasks, relations, categories, onTaskClick, selectedTas
     const [draggedCategory, setDraggedCategory] = useState<string | null>(null);
     const [categoryDragStart, setCategoryDragStart] = useState({ x: 0, y: 0 });
     const [categoryDragOffset, setCategoryDragOffset] = useState({ x: 0, y: 0 });
-
-    // タスクの相対位置管理（セクション内での位置）
-    const [taskRelativePositions, setTaskRelativePositions] = useState<Map<string, { x: number; y: number }>>(new Map());
-    const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
-    const [taskDragStart, setTaskDragStart] = useState({ x: 0, y: 0 });
-    const [taskDragOffset, setTaskDragOffset] = useState({ x: 0, y: 0 });
     const categoryRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
     // タスクの位置を更新
@@ -98,7 +92,7 @@ export function MindMap({ tasks, relations, categories, onTaskClick, selectedTas
         const updatePositions = () => {
             if (!containerRef.current || !contentRef.current) return;
             // ドラッグ中は位置更新をスキップ
-            if (draggingTaskId || draggedCategory) return;
+            if (draggedCategory) return;
 
             const contentRect = contentRef.current.getBoundingClientRect();
             const newPositions = new Map<string, { x: number; y: number; width: number; height: number }>();
@@ -129,7 +123,7 @@ export function MindMap({ tasks, relations, categories, onTaskClick, selectedTas
             cancelAnimationFrame(rafId);
             window.removeEventListener('resize', updatePositions);
         };
-    }, [tasks, categories, zoom, categoryPositions, taskRelativePositions, draggingTaskId, draggedCategory]);
+    }, [tasks, categories, zoom, categoryPositions, draggedCategory]);
 
     // カテゴリーをorderでソート
     const sortedCategories = useMemo(() => {
@@ -178,88 +172,6 @@ export function MindMap({ tasks, relations, categories, onTaskClick, selectedTas
         });
         setCategoryPositions(newPositions);
     }, [activeCategories]);
-
-    // タスクのドラッグ開始
-    const handleTaskMouseDown = useCallback((e: React.MouseEvent, taskId: string) => {
-        e.stopPropagation();
-        setDraggingTaskId(taskId);
-        const pos = taskRelativePositions.get(taskId) || { x: 0, y: 0 };
-        setTaskDragStart({ x: e.clientX / zoom, y: e.clientY / zoom });
-        setTaskDragOffset({ x: pos.x, y: pos.y });
-    }, [taskRelativePositions, zoom]);
-
-    // タスクのドラッグ中（セクション内に制約）
-    useEffect(() => {
-        if (!draggingTaskId) return;
-
-        const handleMouseMove = (e: MouseEvent) => {
-            const dx = e.clientX / zoom - taskDragStart.x;
-            const dy = e.clientY / zoom - taskDragStart.y;
-
-            // タスクが属するカテゴリーを探す
-            const task = tasks.find(t => t.id === draggingTaskId);
-            if (!task) return;
-
-            const categoryElement = categoryRefs.current.get(task.category);
-            if (!categoryElement) return;
-
-            const categoryRect = categoryElement.getBoundingClientRect();
-            const taskElement = taskRefs.current.get(draggingTaskId);
-            if (!taskElement) return;
-
-            const taskRect = taskElement.getBoundingClientRect();
-
-            // 新しい位置を計算
-            let newX = taskDragOffset.x + dx;
-            let newY = taskDragOffset.y + dy;
-
-            // セクション内に制約（padding 24px = 6 * 4pxを考慮）
-            const padding = 24;
-            const headerHeight = 48; // ヘッダーの高さ
-            const maxX = (categoryRect.width / zoom) - (taskRect.width / zoom) - padding;
-            const maxY = (categoryRect.height / zoom) - (taskRect.height / zoom) - padding - headerHeight;
-
-            newX = Math.max(padding, Math.min(newX, maxX));
-            newY = Math.max(headerHeight + padding, Math.min(newY, maxY + headerHeight));
-
-            setTaskRelativePositions(prev => {
-                const newPos = new Map(prev);
-                newPos.set(draggingTaskId, { x: newX, y: newY });
-                return newPos;
-            });
-        };
-
-        const handleMouseUp = () => {
-            setDraggingTaskId(null);
-            // ドラッグ終了後に位置を更新
-            requestAnimationFrame(() => {
-                if (contentRef.current && containerRef.current) {
-                    const contentRect = contentRef.current.getBoundingClientRect();
-                    const newPositions = new Map<string, { x: number; y: number; width: number; height: number }>();
-
-                    taskRefs.current.forEach((element, taskId) => {
-                        const rect = element.getBoundingClientRect();
-                        newPositions.set(taskId, {
-                            x: (rect.left - contentRect.left) / zoom,
-                            y: (rect.top - contentRect.top) / zoom,
-                            width: rect.width / zoom,
-                            height: rect.height / zoom,
-                        });
-                    });
-
-                    setTaskPositions(newPositions);
-                }
-            });
-        };
-
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-
-        return () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [draggingTaskId, taskDragStart, taskDragOffset, zoom, tasks]);
 
     // カテゴリーのドラッグ開始
     const handleCategoryMouseDown = useCallback((e: React.MouseEvent, categoryId: string) => {
@@ -539,43 +451,30 @@ export function MindMap({ tasks, relations, categories, onTaskClick, selectedTas
                                 </div>
 
                                 {/* タスクリスト */}
-                                <div className="p-6 relative" style={{ minHeight: '200px' }}>
+                                <div className="p-6 space-y-5">
                                     {categoryTasks.length === 0 ? (
                                         <p className="text-gray-500 text-sm text-center py-4">
                                             タスクがありません
                                         </p>
                                     ) : (
-                                        categoryTasks.map((task, index) => {
+                                        categoryTasks.map((task) => {
                                             const taskColors = statusColors[task.status] || statusColors.backlog;
                                             const isSelected = selectedTaskId === task.id;
-                                            const isDraggingTask = draggingTaskId === task.id;
-                                            const relativePos = taskRelativePositions.get(task.id);
 
                                             return (
                                                 <div
                                                     key={task.id}
                                                     ref={(el) => setTaskRef(task.id, el)}
                                                     data-task-id={task.id}
-                                                    onMouseDown={(e) => handleTaskMouseDown(e, task.id)}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         onTaskClick(task.id);
                                                     }}
                                                     className={`
-                                                    cursor-move transition-all duration-200 rounded-lg p-4 border-2
+                                                    cursor-pointer transition-all duration-200 rounded-lg p-4 border-2
                                                     ${taskColors.bg} ${taskColors.border}
                                                     ${isSelected ? "ring-4 ring-cyan-400 scale-[1.02]" : "hover:scale-[1.01]"}
-                                                    ${isDraggingTask ? "opacity-50 z-50" : ""}
                                                 `}
-                                                    style={relativePos ? {
-                                                        position: 'absolute',
-                                                        left: `${relativePos.x}px`,
-                                                        top: `${relativePos.y}px`,
-                                                        width: 'calc(100% - 48px)',
-                                                    } : {
-                                                        position: 'relative',
-                                                        marginBottom: index < categoryTasks.length - 1 ? '20px' : '0',
-                                                    }}
                                                 >
                                                     <div className={`font-semibold text-sm truncate mb-2 ${task.status === 'done' ? 'text-gray-500' : 'text-white'}`}>
                                                         {task.name}
